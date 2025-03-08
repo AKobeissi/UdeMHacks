@@ -1,4 +1,3 @@
-# response_gen.py
 from rag_layer import retrieve_context
 
 def generate_response(recommendations, user_profile):

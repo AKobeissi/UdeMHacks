@@ -1,4 +1,3 @@
-# rag_layer.py
 def retrieve_context(supplement_name):
     # Dummy scientific context for each supplement
     knowledge_base = {
