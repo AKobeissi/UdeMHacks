@@ -1,6 +1,6 @@
 # app.py
 import streamlit as st
-from rec_engine import get_recommendations
+from recommendation import get_recommendations
 from response_gen import generate_response
 
 def main():
