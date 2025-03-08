@@ -1,4 +1,3 @@
-# app.py
 import streamlit as st
 from recommendation import get_recommendations
 from response_gen import generate_response
