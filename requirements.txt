@@ -1,3 +1,12 @@
 lightfm
 pandas
 numpy
+streamlit
+scikit-learn
+scipy
+requests
+beautifulsoup4
+nltk
+matplotlib
+seaborn
+scikit-surprise
