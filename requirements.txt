@@ -6,7 +6,7 @@ pandas
 numpy
 folium
 streamlit-folium
-google
+google-genai
 scikit-learn
 matplotlib
 seaborn
