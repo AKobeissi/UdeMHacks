@@ -274,7 +274,7 @@ if __name__ == "__main__":
     dataset_folder = "/Users/chris/Documents/UdeMHacks/Parasite Data Set"
     target_size = (256, 256)
     input_shape = (256, 256, 3)
-    num_classes = 2  # Adjust based on your dataset
+    num_classes = 8  # Adjust based on your dataset
     
     # Process images
     processed_images, image_labels = process_images(dataset_folder, target_size)
@@ -283,13 +283,8 @@ if __name__ == "__main__":
     train_images, test_images, train_labels, test_labels = prepare_data(
         processed_images, image_labels, target_size=(256, 256, 3)
     )
-    
-    # Create model (choose one)
-    # Option 1: Custom ResNet
+
     model = create_custom_resnet(input_shape, num_classes)
-    
-    # Option 2: Pre-trained ResNet (comment out Option 1 if using this)
-    # model = create_pretrained_resnet(input_shape, num_classes, freeze_layers=True)
     
     # Train model
     trained_model, history = train_model(
