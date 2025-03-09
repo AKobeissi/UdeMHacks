@@ -9,5 +9,6 @@ streamlit-folium
 google
 scikit-learn
 matplotlib
+google-generativeai
 seaborn
 python-dotenv
