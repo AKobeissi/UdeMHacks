@@ -6,9 +6,11 @@ pandas
 numpy
 folium
 streamlit-folium
-google
+google-genai
 scikit-learn
 matplotlib
 google-generativeai
 seaborn
 python-dotenv
+opencv-python
+tensorflow
