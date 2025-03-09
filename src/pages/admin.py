@@ -127,3 +127,65 @@ def display_user_management():
                                 st.error("Error deleting user")
                 else:
                     st.warning("Please confirm deletion")
+# Add this to the admin.py file to allow setting up the Gemini API
+
+def display_gemini_setup():
+    """Display a form to set up the Gemini API key"""
+    st.subheader("Gemini AI API Setup")
+    
+    import os
+    
+    # Check if API key is already set
+    current_key = os.getenv("GEMINI_API_KEY")
+    
+    # Check for file-based key
+    key_file_path = os.path.join(os.path.dirname(__file__), 'gemini_api_key.txt')
+    file_key_exists = os.path.exists(key_file_path)
+    
+    if current_key:
+        st.success("✅ Gemini API key is set in environment variables")
+    elif file_key_exists:
+        st.success("✅ Gemini API key is set in configuration file")
+        with open(key_file_path, 'r') as f:
+            masked_key = f.read().strip()
+            if len(masked_key) > 8:
+                masked_key = masked_key[:4] + '*' * (len(masked_key) - 8) + masked_key[-4:]
+            st.write(f"Current key: {masked_key}")
+    else:
+        st.warning("⚠️ No Gemini API key found")
+    
+    with st.form("gemini_setup_form"):
+        st.write("Get your API key from: https://makersuite.google.com/app/apikey")
+        new_api_key = st.text_input("Enter Gemini API Key", type="password")
+        save_method = st.radio("How to save the key", ["Environment Variable (Session Only)", "Configuration File (Persistent)"])
+        
+        submitted = st.form_submit_button("Save API Key")
+        
+        if submitted and new_api_key:
+            if save_method == "Environment Variable (Session Only)":
+                # Set in current session
+                os.environ["GEMINI_API_KEY"] = new_api_key
+                st.success("API key saved to environment variable for this session")
+            else:
+                # Save to file
+                try:
+                    with open(key_file_path, 'w') as f:
+                        f.write(new_api_key)
+                    st.success(f"API key saved to {key_file_path}")
+                except Exception as e:
+                    st.error(f"Error saving API key to file: {str(e)}")
+    
+    # Test the API connection
+    st.subheader("Test Gemini API Connection")
+    if st.button("Test API Connection"):
+        from utils import generate_insights_with_gemini
+        
+        with st.spinner("Testing API connection..."):
+            test_response = generate_insights_with_gemini("Hello, please respond with a brief message to confirm API is working correctly.")
+            
+            if test_response:
+                st.success("✅ API connection successful!")
+                st.write("Response:")
+                st.write(test_response)
+            else:
+                st.error("❌ API connection failed. Please check your API key.")

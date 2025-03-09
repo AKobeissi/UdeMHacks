@@ -51,7 +51,7 @@ def analyze_sample(image):
     """Analyze a sample image and return diagnosis and confidence"""
     # Load model with map_location to handle GPU-trained models on CPU
     model = torch.load(
-        r'C:\Users\akobe\OneDrive\UdeMHacks\src\complete_parasite_model.pt', 
+        r'C:\Users\akobe\OneDrive\UdeMHacks\src\complete_parasite_model1.pt', 
         map_location=torch.device('cpu')
     )
     processed_image = preprocess_image(image)

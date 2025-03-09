@@ -72,16 +72,51 @@ def generate_insights_with_gemini(prompt):
     """Generate insights using Google Gemini API"""
     try:
         import google.generativeai as genai
+        import os
         
-        api_key = os.getenv("GEMINI_API_KEY")
+        # Try different ways to get the API key
+        # api_key = os.getenv("GEMINI_API_KEY")
+        api_key = "AIzaSyA1ctEo4qW3FCTXGbBRK57-0imsVRoqiBA"
+        
+        # Check if file-based API key exists as fallback
         if not api_key:
+            try:
+                # Try to load from a config file
+                api_key_path = os.path.join(os.path.dirname(__file__), 'gemini_api_key.txt')
+                if os.path.exists(api_key_path):
+                    with open(api_key_path, 'r') as f:
+                        api_key = f.read().strip()
+            except Exception as e:
+                st.warning(f"Couldn't load API key from file: {str(e)}")
+        
+        # If still no API key, show a more explicit message
+        if not api_key:
+            st.warning("Gemini API key not found. Please set GEMINI_API_KEY environment variable or create a gemini_api_key.txt file.")
             return None
         
+        # Configure the API
         genai.configure(api_key=api_key)
-        model = genai.GenerativeModel('gemini-1.5-flash')
-        response = model.generate_content(prompt)
         
-        return response.text
+        try:
+            # Use the latest model
+            model = genai.GenerativeModel('gemini-1.5-flash')
+            response = model.generate_content(prompt)
+            return response.text
+        except Exception as model_error:
+            st.warning(f"Error with Gemini model: {str(model_error)}")
+            
+            # Try alternate model as fallback
+            try:
+                model = genai.GenerativeModel('gemini-pro')
+                response = model.generate_content(prompt)
+                return response.text
+            except Exception as fallback_error:
+                st.warning(f"Error with fallback model: {str(fallback_error)}")
+                return None
+            
+    except ImportError:
+        st.warning("Google Generative AI package not installed. Run: pip install google-generativeai")
+        return None
     except Exception as e:
         st.warning(f"Gemini API error: {str(e)}")
         return None
@@ -102,6 +137,7 @@ def generate_patient_insights(diagnosis, confidence):
     # Try to get insights from Gemini
     gemini_response = generate_insights_with_gemini(prompt)
     if gemini_response:
+        print("gemini response")
         return gemini_response
     
     # Fallback to predefined insights if Gemini is not available
