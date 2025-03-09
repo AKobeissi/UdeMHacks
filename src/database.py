@@ -105,6 +105,123 @@ def setup_database():
     
     # Check and fix any missing columns
     check_and_fix_samples_table()
+    fix_patients_schema()
+
+
+def check_and_fix_patients_table():
+    """Check if the patients table has the user_id column and add it if missing"""
+    conn = get_connection()
+    if conn is None:
+        return False
+    
+    try:
+        c = conn.cursor()
+        
+        # Check if the column exists
+        c.execute("PRAGMA table_info(patients)")
+        columns = [info[1] for info in c.fetchall()]
+        
+        # If user_id column doesn't exist, add it
+        if "user_id" not in columns:
+            c.execute("ALTER TABLE patients ADD COLUMN user_id INTEGER")
+            
+            # Update existing records to set a default user_id (admin user)
+            c.execute("UPDATE patients SET user_id = 1 WHERE user_id IS NULL")
+            
+            conn.commit()
+            st.success("Added missing user_id column to patients table and updated existing records")
+        
+        conn.close()
+        return True
+    except sqlite3.Error as e:
+        st.error(f"Database schema check failed: {e}")
+        conn.close()
+        return False
+
+
+def fix_patients_schema():
+    """Fix the patients table schema by adding missing columns"""
+    conn = get_connection()
+    if conn is None:
+        return False
+    
+    try:
+        c = conn.cursor()
+        
+        # Check if the columns exist
+        c.execute("PRAGMA table_info(patients)")
+        columns = [info[1] for info in c.fetchall()]
+        
+        # Add missing columns if needed
+        if "user_id" not in columns:
+            try:
+                c.execute("ALTER TABLE patients ADD COLUMN user_id INTEGER")
+                st.success("Added missing user_id column to patients table")
+            except sqlite3.Error as e:
+                st.error(f"Error adding user_id column: {e}")
+        
+        conn.commit()
+        conn.close()
+        return True
+    except sqlite3.Error as e:
+        st.error(f"Database schema check failed: {e}")
+        if conn:
+            conn.close()
+        return False
+def reset_database():
+    """Reset the database by dropping and recreating all tables - USE WITH CAUTION"""
+    import os
+    from config import DB_NAME
+    
+    # Close any connections
+    try:
+        conn = get_connection()
+        if conn:
+            conn.close()
+    except:
+        pass
+    
+    # Delete the database file
+    try:
+        if os.path.exists(DB_NAME):
+            os.remove(DB_NAME)
+            st.success(f"Database file {DB_NAME} deleted")
+        else:
+            st.warning(f"Database file {DB_NAME} not found")
+    except Exception as e:
+        st.error(f"Error deleting database file: {e}")
+        return False
+    
+    # Re-create everything
+    setup_database()
+    return True
+# def reset_database():
+#     """Reset the database by dropping and recreating all tables - USE WITH CAUTION"""
+#     import os
+#     from config import DB_NAME
+    
+#     # Close any connections
+#     try:
+#         conn = get_connection()
+#         if conn:
+#             conn.close()
+#     except:
+#         pass
+    
+#     # Delete the database file
+#     try:
+#         if os.path.exists(DB_NAME):
+#             os.remove(DB_NAME)
+#             st.success(f"Database file {DB_NAME} deleted")
+#         else:
+#             st.warning(f"Database file {DB_NAME} not found")
+#     except Exception as e:
+#         st.error(f"Error deleting database file: {e}")
+#         return False
+    
+#     # Re-create everything
+#     setup_database()
+#     return True
 
 def execute_query(query, params=(), fetchone=False):
     """Execute a SQL query and return results"""

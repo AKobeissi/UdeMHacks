@@ -31,7 +31,7 @@ def load_model():
 def preprocess_image(image):
     """Preprocess an image for the model"""
     transform = transforms.Compose([
-        transforms.Resize((224, 224)),
+        transforms.Resize((128, 128)), #originally 224 224
         transforms.ToTensor(),
         transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
     ])
@@ -49,7 +49,11 @@ def predict(model, image):
 
 def analyze_sample(image):
     """Analyze a sample image and return diagnosis and confidence"""
-    model = load_model()
+    # Load model with map_location to handle GPU-trained models on CPU
+    model = torch.load(
+        r'C:\Users\akobe\OneDrive\UdeMHacks\src\complete_parasite_model.pt', 
+        map_location=torch.device('cpu')
+    )
     processed_image = preprocess_image(image)
     diagnosis, confidence = predict(model, processed_image)
     return diagnosis, confidence

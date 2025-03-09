@@ -186,25 +186,38 @@ def display_technician_portal():
         # Get user ID for query (None for admin to see all samples)
         query_user_id = None if st.session_state.user_role == "admin" else st.session_state.user_id
         
-        # Get samples for this technician
-        if query_user_id:
+        # # Get samples for this technician
+        # if query_user_id:
+        #     samples = database.execute_read_query(f"""
+        #         SELECT s.id, p.name, s.image_path, s.ai_diagnosis, s.ai_confidence, 
+        #                s.doctor_diagnosis, s.doctor_verified, s.date_diagnosed
+        #         FROM samples s
+        #         JOIN patients p ON s.patient_id = p.id
+        #         WHERE 
+        #             {verified_condition} AND 
+        #             {date_condition} AND
+        #             p.user_id = ?
+        #         ORDER BY s.date_diagnosed DESC
+        #         LIMIT 20
+        #     """, params=[query_user_id])
+        # else:
+        #     # For admin, show all samples
+        #     samples = database.execute_read_query(f"""
+        #         SELECT s.id, p.name, s.image_path, s.ai_diagnosis, s.ai_confidence, 
+        #                s.doctor_diagnosis, s.doctor_verified, s.date_diagnosed
+        #         FROM samples s
+        #         JOIN patients p ON s.patient_id = p.id
+        #         WHERE 
+        #             {verified_condition} AND 
+        #             {date_condition}
+        #         ORDER BY s.date_diagnosed DESC
+        #         LIMIT 20
+        #     """)
+        # Modified query that doesn't rely on p.user_id
+        try:
             samples = database.execute_read_query(f"""
                 SELECT s.id, p.name, s.image_path, s.ai_diagnosis, s.ai_confidence, 
-                       s.doctor_diagnosis, s.doctor_verified, s.date_diagnosed
-                FROM samples s
-                JOIN patients p ON s.patient_id = p.id
-                WHERE 
-                    {verified_condition} AND 
-                    {date_condition} AND
-                    p.user_id = ?
-                ORDER BY s.date_diagnosed DESC
-                LIMIT 20
-            """, params=[query_user_id])
-        else:
-            # For admin, show all samples
-            samples = database.execute_read_query(f"""
-                SELECT s.id, p.name, s.image_path, s.ai_diagnosis, s.ai_confidence, 
-                       s.doctor_diagnosis, s.doctor_verified, s.date_diagnosed
+                    s.doctor_diagnosis, s.doctor_verified, s.date_diagnosed
                 FROM samples s
                 JOIN patients p ON s.patient_id = p.id
                 WHERE 
@@ -213,6 +226,55 @@ def display_technician_portal():
                 ORDER BY s.date_diagnosed DESC
                 LIMIT 20
             """)
+            
+            st.info("Note: Showing all samples due to database schema issue")
+            
+        except Exception as e:
+            st.error(f"Error fetching samples: {str(e)}")
+            samples = pd.DataFrame()  # Create an empty DataFrame on error
+
+        # Replace with this temporary approach:
+        # try:
+        #     if query_user_id:
+        #         samples = database.execute_read_query(f"""
+        #             SELECT s.id, p.name, s.image_path, s.ai_diagnosis, s.ai_confidence, 
+        #                 s.doctor_diagnosis, s.doctor_verified, s.date_diagnosed
+        #             FROM samples s
+        #             JOIN patients p ON s.patient_id = p.id
+        #             WHERE 
+        #                 {verified_condition} AND 
+        #                 {date_condition} AND
+        #                 p.user_id = ?
+        #             ORDER BY s.date_diagnosed DESC
+        #             LIMIT 20
+        #         """, params=[query_user_id])
+        #     else:
+        #         # For admin, show all samples
+        #         samples = database.execute_read_query(f"""
+        #             SELECT s.id, p.name, s.image_path, s.ai_diagnosis, s.ai_confidence, 
+        #                 s.doctor_diagnosis, s.doctor_verified, s.date_diagnosed
+        #             FROM samples s
+        #             JOIN patients p ON s.patient_id = p.id
+        #             WHERE 
+        #                 {verified_condition} AND 
+        #                 {date_condition}
+        #             ORDER BY s.date_diagnosed DESC
+        #             LIMIT 20
+        #         """)
+        # except:
+        #     # Fallback to a simpler query without the user_id filter
+        #     st.warning("Using fallback query mode due to database schema issue")
+        #     samples = database.execute_read_query(f"""
+        #         SELECT s.id, p.name, s.image_path, s.ai_diagnosis, s.ai_confidence, 
+        #             s.doctor_diagnosis, s.doctor_verified, s.date_diagnosed
+        #         FROM samples s
+        #         JOIN patients p ON s.patient_id = p.id
+        #         WHERE 
+        #             {verified_condition} AND 
+        #             {date_condition}
+        #         ORDER BY s.date_diagnosed DESC
+        #         LIMIT 20
+        #     """)
         
         if not samples.empty:
             # Display as a data table first
@@ -250,3 +312,6 @@ def display_technician_portal():
                             st.warning("⏳ Awaiting doctor verification")
         else:
             st.info("No samples found for the selected criteria")
+
+
+            

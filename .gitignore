@@ -9,6 +9,10 @@ __pycache__/
 # Data
 Parasite Data Set/
 
+# dont push model 
+complete_parasite_model.pt 
+src/*.pt
+
 # Distribution / packaging
 .Python
 build/
