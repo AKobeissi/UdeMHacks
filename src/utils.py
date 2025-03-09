@@ -7,6 +7,7 @@ from datetime import datetime
 from PIL import Image
 import io
 from config import UPLOAD_DIR
+from folium.plugins import HeatMap
 
 def save_uploaded_image(uploaded_file, patient_id):
     """Save an uploaded image to the filesystem"""
@@ -28,7 +29,7 @@ def save_uploaded_image(uploaded_file, patient_id):
         return None, None
 
 def create_heatmap(df):
-    """Create a folium heatmap from dataframe with lat/long coords"""
+    """Create a folium heatmap from dataframe with lat/long coordinates and case density"""
     if df.empty or 'latitude' not in df.columns or 'longitude' not in df.columns:
         return None
     
@@ -39,8 +40,8 @@ def create_heatmap(df):
     )
     
     # Count diagnoses by location
-    location_counts = df.groupby(['latitude', 'longitude', 'final_diagnosis']).size().reset_index(name='count')
-    
+    location_counts = df.groupby(['latitude', 'longitude']).size().reset_index(name='count')
+
     # Check if we have valid data
     if location_counts.empty:
         return None
@@ -50,28 +51,19 @@ def create_heatmap(df):
     center_lon = df['longitude'].mean()
     
     m = folium.Map(location=[center_lat, center_lon], zoom_start=6)
-    
-    # Add markers for each location with diagnosis info
-    for _, row in location_counts.iterrows():
-        if pd.isna(row['latitude']) or pd.isna(row['longitude']):
-            continue
-            
-        folium.CircleMarker(
-            location=[row['latitude'], row['longitude']],
-            radius=int(5 + row['count'] * 2),  # Size based on count
-            popup=f"{row['final_diagnosis']}: {row['count']} cases",
-            color='red',
-            fill=True,
-            fill_color='red',
-            fill_opacity=0.6
-        ).add_to(m)
+
+    # Convert data to heatmap-compatible format
+    heat_data = location_counts[['latitude', 'longitude', 'count']].values.tolist()
+
+    # Add heatmap layer
+    HeatMap(heat_data, min_opacity=0.2, radius=15, blur=10, max_zoom=12).add_to(m)
     
     return m
 
 def generate_insights_with_gemini(prompt):
     """Generate insights using Google Gemini API"""
     try:
-        import google.generativeai as genai
+        from google import generativeai as genai
         import os
         
         # Try different ways to get the API key

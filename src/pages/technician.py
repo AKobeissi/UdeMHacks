@@ -9,6 +9,7 @@ import ml_model
 from styles import formatted_header, info_box
 from utils import save_uploaded_image
 from datetime import datetime
+import pandas as pd
 
 @auth.role_required(["technician", "admin"])
 def display_technician_portal():
