@@ -12,3 +12,4 @@ matplotlib
 seaborn
 python-dotenv
 opencv-python
+tensorflow

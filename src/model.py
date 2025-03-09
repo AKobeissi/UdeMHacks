@@ -1,290 +1,304 @@
-# model_training.py
-import torch
-import torch.nn as nn
-import torch.optim as optim
-from torch.utils.data import Dataset, DataLoader
-from torchvision import transforms, models
-from PIL import Image
-import os
-import pandas as pd
-import sqlite3
-from sklearn.model_selection import train_test_split
-import matplotlib.pyplot as plt
+import tensorflow as tf
+from tensorflow.keras import layers, models
+from tensorflow.keras.applications import ResNet50
 import numpy as np
-from datetime import datetime
 
-# Custom dataset for parasite images
-class ParasiteDataset(Dataset):
-    def __init__(self, image_paths, labels, transform=None):
-        self.image_paths = image_paths
-        self.labels = labels
-        self.transform = transform
-        
-    def __len__(self):
-        return len(self.image_paths)
+def identity_block(x, filters, kernel_size=3):
+    """
+    Implementation of the identity block for ResNet
     
-    def __getitem__(self, idx):
-        image = Image.open(self.image_paths[idx]).convert('RGB')
-        
-        if self.transform:
-            image = self.transform(image)
-            
-        label = self.labels[idx]
-        return image, label
+    Arguments:
+        x: input tensor
+        filters: list of integers, the filters of 3 conv layer at main path
+        kernel_size: default 3, the kernel size of middle conv layer at main path
+    
+    Returns:
+        Output tensor for the block
+    """
+    filters1, filters2, filters3 = filters
+    
+    shortcut = x
+    
+    # First component
+    x = layers.Conv2D(filters1, (1, 1), padding='valid')(x)
+    x = layers.BatchNormalization()(x)
+    x = layers.Activation('relu')(x)
+    
+    # Second component
+    x = layers.Conv2D(filters2, kernel_size, padding='same')(x)
+    x = layers.BatchNormalization()(x)
+    x = layers.Activation('relu')(x)
+    
+    # Third component
+    x = layers.Conv2D(filters3, (1, 1), padding='valid')(x)
+    x = layers.BatchNormalization()(x)
+    
+    # Add shortcut connection
+    x = layers.add([x, shortcut])
+    x = layers.Activation('relu')(x)
+    
+    return x
 
-# Data preprocessing transformations
-def get_transforms():
-    train_transform = transforms.Compose([
-        transforms.Resize((224, 224)),
-        transforms.RandomHorizontalFlip(),
-        transforms.RandomRotation(10),
-        transforms.RandomAffine(0, shear=10, scale=(0.8, 1.2)),
-        transforms.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2),
-        transforms.ToTensor(),
-        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
-    ])
+def conv_block(x, filters, kernel_size=3, stride=2):
+    """
+    Implementation of the convolutional block for ResNet
     
-    val_transform = transforms.Compose([
-        transforms.Resize((224, 224)),
-        transforms.ToTensor(),
-        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
-    ])
+    Arguments:
+        x: input tensor
+        filters: list of integers, the filters of 3 conv layer at main path
+        kernel_size: default 3, the kernel size of middle conv layer at main path
+        stride: stride for the first convolution and shortcut
     
-    return train_transform, val_transform
+    Returns:
+        Output tensor for the block
+    """
+    filters1, filters2, filters3 = filters
+    
+    # Shortcut connection with 1x1 conv to match dimensions
+    shortcut = layers.Conv2D(filters3, (1, 1), strides=stride, padding='valid')(x)
+    shortcut = layers.BatchNormalization()(shortcut)
+    
+    # First component with stride
+    x = layers.Conv2D(filters1, (1, 1), strides=stride, padding='valid')(x)
+    x = layers.BatchNormalization()(x)
+    x = layers.Activation('relu')(x)
+    
+    # Second component
+    x = layers.Conv2D(filters2, kernel_size, padding='same')(x)
+    x = layers.BatchNormalization()(x)
+    x = layers.Activation('relu')(x)
+    
+    # Third component
+    x = layers.Conv2D(filters3, (1, 1), padding='valid')(x)
+    x = layers.BatchNormalization()(x)
+    
+    # Add shortcut connection
+    x = layers.add([x, shortcut])
+    x = layers.Activation('relu')(x)
+    
+    return x
 
-# Get data from database for continual learning
-def get_training_data():
-    conn = sqlite3.connect('parasite_diagnosis.db')
+def create_custom_resnet(input_shape, num_classes):
+    """
+    Create a custom ResNet model
     
-    # Get all verified samples
-    df = pd.read_sql_query("""
-    SELECT s.image_path, s.doctor_diagnosis
-    FROM samples s
-    WHERE s.doctor_verified = 1
-    """, conn)
+    Arguments:
+        input_shape: shape of input images
+        num_classes: number of classes
     
-    conn.close()
+    Returns:
+        ResNet model
+    """
+    inputs = layers.Input(shape=input_shape)
     
-    # Map class names to indices
-    class_names = [
-        "Plasmodium falciparum", 
-        "Plasmodium vivax", 
-        "Plasmodium malariae", 
-        "Plasmodium ovale", 
-        "Trypanosoma", 
-        "Leishmania", 
-        "Schistosoma", 
-        "Filariasis", 
-        "Entamoeba histolytica", 
-        "No parasite detected"
-    ]
-    class_to_idx = {name: idx for idx, name in enumerate(class_names)}
+    # Initial convolution
+    x = layers.Conv2D(64, (7, 7), strides=(2, 2), padding='same')(inputs)
+    x = layers.BatchNormalization()(x)
+    x = layers.Activation('relu')(x)
+    x = layers.MaxPooling2D((3, 3), strides=(2, 2), padding='same')(x)
     
-    image_paths = df['image_path'].tolist()
-    labels = [class_to_idx[diagnosis] for diagnosis in df['doctor_diagnosis']]
+    # ResNet blocks
+    # Block 1
+    x = conv_block(x, [64, 64, 256], stride=1)
+    x = identity_block(x, [64, 64, 256])
+    x = identity_block(x, [64, 64, 256])
     
-    return image_paths, labels, class_names
-
-# Initialize and train the model
-def train_model(image_paths, labels, class_names, epochs=10, batch_size=32, learning_rate=0.001):
-    # Split data
-    train_paths, val_paths, train_labels, val_labels = train_test_split(
-        image_paths, labels, test_size=0.2, stratify=labels, random_state=42
-    )
+    # Block 2
+    x = conv_block(x, [128, 128, 512])
+    x = identity_block(x, [128, 128, 512])
+    x = identity_block(x, [128, 128, 512])
+    x = identity_block(x, [128, 128, 512])
     
-    # Create datasets
-    train_transform, val_transform = get_transforms()
+    # Block 3
+    x = conv_block(x, [256, 256, 1024])
+    x = identity_block(x, [256, 256, 1024])
+    x = identity_block(x, [256, 256, 1024])
+    x = identity_block(x, [256, 256, 1024])
+    x = identity_block(x, [256, 256, 1024])
+    x = identity_block(x, [256, 256, 1024])
     
-    train_dataset = ParasiteDataset(train_paths, train_labels, transform=train_transform)
-    val_dataset = ParasiteDataset(val_paths, val_labels, transform=val_transform)
+    # Block 4
+    x = conv_block(x, [512, 512, 2048])
+    x = identity_block(x, [512, 512, 2048])
+    x = identity_block(x, [512, 512, 2048])
     
-    # Create data loaders
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
-    val_loader = DataLoader(val_dataset, batch_size=batch_size)
+    # Final layers
+    x = layers.GlobalAveragePooling2D()(x)
+    outputs = layers.Dense(num_classes, activation='softmax')(x)
     
-    # Initialize model
-    model = models.resnet50(pretrained=True)
-    num_classes = len(class_names)
-    model.fc = nn.Linear(model.fc.in_features, num_classes)
-    
-    # Load existing model if available
-    if os.path.exists('parasite_model.pth'):
-        model.load_state_dict(torch.load('parasite_model.pth'))
-        print("Loaded existing model for fine-tuning")
-    
-    # Set device
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model = model.to(device)
-    
-    # Loss function and optimizer
-    criterion = nn.CrossEntropyLoss()
-    optimizer = optim.Adam(model.parameters(), lr=learning_rate)
-    
-    # Learning rate scheduler
-    scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='max', patience=3, factor=0.1)
-    
-    # Training loop
-    history = {
-        'train_loss': [],
-        'val_loss': [],
-        'train_acc': [],
-        'val_acc': []
-    }
-    
-    best_acc = 0.0
-    
-    for epoch in range(epochs):
-        # Training phase
-        model.train()
-        train_loss = 0.0
-        train_correct = 0
-        train_total = 0
-        
-        for inputs, targets in train_loader:
-            inputs, targets = inputs.to(device), targets.to(device)
-            
-            optimizer.zero_grad()
-            outputs = model(inputs)
-            loss = criterion(outputs, targets)
-            loss.backward()
-            optimizer.step()
-            
-            train_loss += loss.item() * inputs.size(0)
-            _, predicted = torch.max(outputs, 1)
-            train_total += targets.size(0)
-            train_correct += (predicted == targets).sum().item()
-        
-        train_loss = train_loss / len(train_loader.dataset)
-        train_acc = train_correct / train_total
-        
-        # Validation phase
-        model.eval()
-        val_loss = 0.0
-        val_correct = 0
-        val_total = 0
-        
-        with torch.no_grad():
-            for inputs, targets in val_loader:
-                inputs, targets = inputs.to(device), targets.to(device)
-                
-                outputs = model(inputs)
-                loss = criterion(outputs, targets)
-                
-                val_loss += loss.item() * inputs.size(0)
-                _, predicted = torch.max(outputs, 1)
-                val_total += targets.size(0)
-                val_correct += (predicted == targets).sum().item()
-        
-        val_loss = val_loss / len(val_loader.dataset)
-        val_acc = val_correct / val_total
-        
-        # Update learning rate
-        scheduler.step(val_acc)
-        
-        # Save history
-        history['train_loss'].append(train_loss)
-        history['val_loss'].append(val_loss)
-        history['train_acc'].append(train_acc)
-        history['val_acc'].append(val_acc)
-        
-        print(f'Epoch {epoch+1}/{epochs}, Train Loss: {train_loss:.4f}, Train Acc: {train_acc:.4f}, Val Loss: {val_loss:.4f}, Val Acc: {val_acc:.4f}')
-        
-        # Save best model
-        if val_acc > best_acc:
-            best_acc = val_acc
-            torch.save(model.state_dict(), 'parasite_model.pth')
-            print(f'Model saved with accuracy: {val_acc:.4f}')
-    
-    # Plot training history
-    plt.figure(figsize=(12, 5))
-    
-    plt.subplot(1, 2, 1)
-    plt.plot(history['train_loss'], label='Train Loss')
-    plt.plot(history['val_loss'], label='Validation Loss')
-    plt.title('Loss')
-    plt.legend()
-    
-    plt.subplot(1, 2, 2)
-    plt.plot(history['train_acc'], label='Train Accuracy')
-    plt.plot(history['val_acc'], label='Validation Accuracy')
-    plt.title('Accuracy')
-    plt.legend()
-    
-    plt.savefig(f'training_history_{datetime.now().strftime("%Y%m%d_%H%M%S")}.png')
+    # Create model
+    model = models.Model(inputs=inputs, outputs=outputs)
     
     return model
 
-# Evaluate model performance and generate confusion matrix
-def evaluate_model(model, image_paths, labels, class_names):
-    # Create dataset and dataloader
-    _, val_transform = get_transforms()
-    dataset = ParasiteDataset(image_paths, labels, transform=val_transform)
-    dataloader = DataLoader(dataset, batch_size=32)
+def create_pretrained_resnet(input_shape, num_classes, freeze_layers=True):
+    """
+    Create a ResNet model using pre-trained weights from ImageNet
     
-    # Set device
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model = model.to(device)
+    Arguments:
+        input_shape: shape of input images
+        num_classes: number of classes
+        freeze_layers: whether to freeze the pre-trained layers
     
-    # Evaluate
-    model.eval()
-    all_preds = []
-    all_labels = []
+    Returns:
+        ResNet model with pre-trained weights
+    """
+    base_model = ResNet50(weights='imagenet', include_top=False, input_shape=input_shape)
     
-    with torch.no_grad():
-        for inputs, targets in dataloader:
-            inputs, targets = inputs.to(device), targets.to(device)
-            
-            outputs = model(inputs)
-            _, predicted = torch.max(outputs, 1)
-            
-            all_preds.extend(predicted.cpu().numpy())
-            all_labels.extend(targets.cpu().numpy())
+    # Freeze the base model layers if required
+    if freeze_layers:
+        for layer in base_model.layers:
+            layer.trainable = False
     
-    # Calculate accuracy
-    accuracy = sum(1 for x, y in zip(all_preds, all_labels) if x == y) / len(all_labels)
-    print(f'Model accuracy: {accuracy:.4f}')
+    # Add classification head
+    x = base_model.output
+    x = layers.GlobalAveragePooling2D()(x)
+    x = layers.Dense(1024, activation='relu')(x)
+    x = layers.Dropout(0.5)(x)
+    outputs = layers.Dense(num_classes, activation='softmax')(x)
     
-    # Generate confusion matrix
-    from sklearn.metrics import confusion_matrix, classification_report
-    import seaborn as sns
+    # Create model
+    model = models.Model(inputs=base_model.input, outputs=outputs)
     
-    cm = confusion_matrix(all_labels, all_preds)
-    
-    plt.figure(figsize=(12, 10))
-    sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', xticklabels=class_names, yticklabels=class_names)
-    plt.xlabel('Predicted')
-    plt.ylabel('True')
-    plt.title('Confusion Matrix')
-    plt.savefig(f'confusion_matrix_{datetime.now().strftime("%Y%m%d_%H%M%S")}.png')
-    
-    # Print classification report
-    report = classification_report(all_labels, all_preds, target_names=class_names)
-    print(report)
-    
-    # Save report to file
-    with open(f'classification_report_{datetime.now().strftime("%Y%m%d_%H%M%S")}.txt', 'w') as f:
-        f.write(report)
+    return model
 
-# Main function to run the training process
-def main():
-    print("Starting model training process...")
+def prepare_data(processed_images, image_labels, target_size=(256, 256, 3), test_split=0.2):
+    """
+    Prepare the processed data for the model
     
-    # Get data
-    image_paths, labels, class_names = get_training_data()
+    Arguments:
+        processed_images: Numpy array of processed images
+        image_labels: Numpy array of image labels
+        target_size: Target size of the images
+        test_split: Proportion of data to use for testing
     
-    if len(image_paths) < 10:
-        print(f"Not enough verified samples for training: {len(image_paths)} found. Need at least 10.")
-        return
+    Returns:
+        train_images, test_images, train_labels, test_labels
+    """
+    # Convert labels to categorical
+    num_classes = len(np.unique(image_labels))
+    image_labels = tf.keras.utils.to_categorical(image_labels, num_classes)
     
-    print(f"Found {len(image_paths)} verified samples for training")
+    # Reshape flat images back to 3D if they were flattened
+    if len(processed_images.shape) == 2:  # If images are flattened
+        num_samples = processed_images.shape[0]
+        processed_images = processed_images.reshape(num_samples, target_size[0], target_size[1], target_size[2])
     
-    # Train model
-    model = train_model(image_paths, labels, class_names)
+    # Split data into training and testing sets
+    total_samples = processed_images.shape[0]
+    indices = np.random.permutation(total_samples)
+    test_size = int(total_samples * test_split)
+    test_indices = indices[:test_size]
+    train_indices = indices[test_size:]
     
-    # Evaluate model
-    evaluate_model(model, image_paths, labels, class_names)
+    train_images = processed_images[train_indices]
+    test_images = processed_images[test_indices]
+    train_labels = image_labels[train_indices]
+    test_labels = image_labels[test_indices]
     
-    print("Training complete!")
+    return train_images, test_images, train_labels, test_labels
+
+def train_model(model, train_images, train_labels, test_images, test_labels, 
+               batch_size=32, epochs=50, learning_rate=0.001):
+    """
+    Train the ResNet model
+    
+    Arguments:
+        model: The ResNet model
+        train_images: Training images
+        train_labels: Training labels
+        test_images: Testing images
+        test_labels: Testing labels
+        batch_size: Batch size for training
+        epochs: Number of epochs to train
+        learning_rate: Learning rate for the optimizer
+    
+    Returns:
+        Trained model and training history
+    """
+    # Compile the model
+    optimizer = tf.keras.optimizers.Adam(learning_rate=learning_rate)
+    model.compile(
+        optimizer=optimizer,
+        loss='categorical_crossentropy',
+        metrics=['accuracy']
+    )
+    
+    # Define callbacks
+    early_stopping = tf.keras.callbacks.EarlyStopping(
+        monitor='val_loss',
+        patience=10,
+        restore_best_weights=True
+    )
+    
+    reduce_lr = tf.keras.callbacks.ReduceLROnPlateau(
+        monitor='val_loss',
+        factor=0.2,
+        patience=5,
+        min_lr=1e-6
+    )
+    
+    # Train the model
+    history = model.fit(
+        train_images, train_labels,
+        batch_size=batch_size,
+        epochs=epochs,
+        validation_data=(test_images, test_labels),
+        callbacks=[early_stopping, reduce_lr]
+    )
+    
+    return model, history
+
+def evaluate_model(model, test_images, test_labels):
+    """
+    Evaluate the trained model
+    
+    Arguments:
+        model: Trained model
+        test_images: Test images
+        test_labels: Test labels
+    
+    Returns:
+        Test loss and accuracy
+    """
+    loss, accuracy = model.evaluate(test_images, test_labels)
+    print(f"Test Loss: {loss:.4f}")
+    print(f"Test Accuracy: {accuracy:.4f}")
+    return loss, accuracy
 
 if __name__ == "__main__":
-    main()
+    # Example usage (will need to be adjusted based on your actual data)
+    from preprocessing import process_images
+    
+    # Parameters
+    dataset_folder = "/Users/chris/Documents/UdeMHacks/Parasite Data Set"
+    target_size = (256, 256)
+    input_shape = (256, 256, 3)
+    num_classes = 2  # Adjust based on your dataset
+    
+    # Process images
+    processed_images, image_labels = process_images(dataset_folder, target_size)
+    
+    # Prepare data
+    train_images, test_images, train_labels, test_labels = prepare_data(
+        processed_images, image_labels, target_size=(256, 256, 3)
+    )
+    
+    # Create model (choose one)
+    # Option 1: Custom ResNet
+    model = create_custom_resnet(input_shape, num_classes)
+    
+    # Option 2: Pre-trained ResNet (comment out Option 1 if using this)
+    # model = create_pretrained_resnet(input_shape, num_classes, freeze_layers=True)
+    
+    # Train model
+    trained_model, history = train_model(
+        model, train_images, train_labels, test_images, test_labels,
+        batch_size=32, epochs=50
+    )
+    
+    # Evaluate model
+    evaluate_model(trained_model, test_images, test_labels)
+    
+    # Save model
+    trained_model.save("resnet_model.h5")

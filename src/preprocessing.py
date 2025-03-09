@@ -2,80 +2,55 @@ import os
 import cv2
 import numpy as np
 
-def preprocess_image(image, target_size):
-    original_height, original_width, _ = image.shape
-    target_width, target_height = target_size
-
-    # Determine scaling factors
-    scale_w = target_width / original_width
-    scale_h = target_height / original_height
-    scale = min(scale_w, scale_h)
-
-    # Only use resize if the image is larger than target resolution
-    if scale < 1:
-        new_width = int(original_width * scale)
-        new_height = int(original_height * scale)
-        resized_image = cv2.resize(image, (new_width, new_height), interpolation=cv2.INTER_AREA)
-    else:
-        resized_image = image.copy()
-
-    # If one dimension is still smaller, pad minimally to reach target size
-    pad_top, pad_bottom, pad_left, pad_right = 0, 0, 0, 0
-    final_height, final_width, _ = resized_image.shape
-
-    if final_width < target_width:
-        pad_left = (target_width - final_width) // 2
-        pad_right = target_width - final_width - pad_left
-    if final_height < target_height:
-        pad_top = (target_height - final_height) // 2
-        pad_bottom = target_height - final_height - pad_top
-
-    # Apply padding only if necessary by adding black pixels
-    if pad_top > 0 or pad_bottom > 0 or pad_left > 0 or pad_right > 0:
-        processed_image = cv2.copyMakeBorder(resized_image, pad_top, pad_bottom, pad_left, pad_right, cv2.BORDER_CONSTANT, value=(0, 0, 0))
-    else:
-        processed_image = resized_image
-
-    return processed_image
-
-def load_images_from_folder(dir_path, label):
-    images, labels = [], []
-    for img_name in os.listdir(dir_path):
-        img_path = os.path.join(dir_path, img_name)
-        img = cv2.imread(img_path)
-        if img is not None:
-            images.append(img)
-            labels.append(label)
-    return images, labels
-
-# Process all images
 def process_images(dataset_folder, target_size):
-    image_set, label_set = [], []
-    for dir in os.listdir(dataset_folder):
-        dir_path = os.path.join(dataset_folder, dir)
-        label = dir.split("_")[0]
-        images, labels = load_images_from_folder(dir_path, label)
-        image_set.append(images)
-        label_set.append(labels)
+    image_set = []
+    labels = []
     
-    processed_images = []
-    for img in image_set:
-        processed_image = preprocess_image(img, target_size)
-        processed_images.append(processed_image / 255)
+    # For each class/subfolder in the dataset
+    for class_folder in os.listdir(dataset_folder):
+        class_path = os.path.join(dataset_folder, class_folder)
+        
+        # Skip if not a directory or if it's a hidden file
+        if not os.path.isdir(class_path) or class_folder.startswith('.'):
+            continue
+        
+        label_name = class_folder.split('_')[0]
 
-    # Convert processed images and label set array to a numpy array
-    processed_images = np.array(processed_images)
-    image_labels = np.array(label_set)
-
-    # Reshape image data set to be a 2D array instead of a 4D array
-    # From (num_samples, height, width, channels) to (num_samples, height*width*channels)
-    num_images = processed_images.shape[0]
-    processed_images = processed_images.reshape(num_images, -1)
+        # Process each image in the class folder
+        for img_file in os.listdir(class_path):
+            # Skip hidden files
+            if img_file.startswith('.'):
+                continue
+                
+            img_path = os.path.join(class_path, img_file)
+            
+            # Make sure it's a file and has an image extension
+            if not os.path.isfile(img_path):
+                continue
+                
+            # Common image extensions
+            if not img_path.lower().endswith(('.png', '.jpg', '.jpeg', '.tif', '.bmp', '.gif')):
+                continue
+            
+            # Load the image properly with OpenCV
+            img = cv2.imread(img_path)
+            
+            # Skip if image couldn't be loaded
+            if img is None:
+                print(f"Warning: Could not load image {img_path}")
+                continue
+                
+            # Resize the image to target size
+            try:
+                processed_image = cv2.resize(img, target_size)
+                image_set.append(processed_image)
+                labels.append(label_name)
+            except Exception as e:
+                print(f"Error processing {img_path}: {e}")
     
-    return processed_images, image_labels
-
-if __name__ == "__main__":
-    input_folder = "/UdeMHacks/Parasite Data Set"
-    target_size = (256, 256)
-
-    process_images(input_folder, target_size)
+    # Convert to numpy arrays if we have images
+    if image_set:
+        image_set = np.array(image_set)
+        labels = np.array(labels)
+        
+    return image_set, labels
