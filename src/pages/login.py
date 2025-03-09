@@ -9,10 +9,10 @@ def display_login_page():
     
     with col2:
         formatted_header("Parasite Diagnosis System")
-        info_box("Please sign in to access the system. If you're a doctor, use the 'Doctor Sign In' tab.")
+        info_box("Please sign in to access the system.")
         
         # Create tabs for Sign In and Register
-        tab1, tab2, tab3 = st.tabs(["Patient Sign In", "Doctor Sign In", "Register New Account"])
+        tab1, tab2, tab3, tab4 = st.tabs(["Patient Sign In", "Doctor Sign In", "Technician Sign In", "Register New Account"])
         
         with tab1:
             with st.form("patient_login_form"):
@@ -57,8 +57,30 @@ def display_login_page():
                             st.error("Invalid username or password")
                     else:
                         st.warning("Please enter both username and password")
-        
+                        
         with tab3:
+            with st.form("technician_login_form"):
+                st.subheader("Technician Sign In")
+                tech_username = st.text_input("Username")
+                tech_password = st.text_input("Password", type="password")
+                tech_submit_button = st.form_submit_button("Login", use_container_width=True)
+                
+                # Demo technician account info
+                st.markdown("---")
+                st.markdown("<small>For testing, register a new technician account</small>", unsafe_allow_html=True)
+                
+                if tech_submit_button:
+                    if tech_username and tech_password:
+                        if auth.login_user(tech_username, tech_password, "technician"):
+                            st.success(f"Welcome back, {st.session_state.full_name}!")
+                            time.sleep(1)
+                            st.rerun()
+                        else:
+                            st.error("Invalid username or password")
+                    else:
+                        st.warning("Please enter both username and password")
+        
+        with tab4:
             with st.form("register_form"):
                 st.subheader("Create Your Account")
                 
@@ -67,6 +89,7 @@ def display_login_page():
                 confirm_password = st.text_input("Confirm Password", type="password")
                 full_name = st.text_input("Full Name")
                 email = st.text_input("Email")
+                role = st.selectbox("Account Type", ["patient", "technician"])  # Add technician option
                 
                 register_button = st.form_submit_button("Create Account", use_container_width=True)
                 
@@ -76,7 +99,7 @@ def display_login_page():
                     elif new_password != confirm_password:
                         st.error("Passwords do not match")
                     else:
-                        success, message = auth.register_user(new_username, new_password, full_name, email, "patient")
+                        success, message = auth.register_user(new_username, new_password, full_name, email, role)
                         
                         if success:
                             st.success(f"Account created successfully! You can now sign in.")

@@ -5,7 +5,7 @@ from datetime import datetime
 import hashlib
 import uuid
 import os
-from config import DB_NAME, DEFAULT_ADMIN, DEFAULT_DOCTOR
+from config import DB_NAME, DEFAULT_ADMIN, DEFAULT_DOCTOR, DEFAULT_TECHNICIAN
 
 def get_connection():
     """Get a connection to the database"""
@@ -15,7 +15,6 @@ def get_connection():
     except sqlite3.Error as e:
         st.error(f"Database connection error: {e}")
         return None
-
 def setup_database():
     """Initialize the database and create tables if they don't exist"""
     conn = get_connection()
@@ -90,8 +89,22 @@ def setup_database():
              DEFAULT_DOCTOR["full_name"], datetime.now())
         )
     
+    # Create default technician user if not exists
+    c.execute("SELECT * FROM users WHERE username = ?", (DEFAULT_TECHNICIAN["username"],))
+    if not c.fetchone():
+        salt = uuid.uuid4().hex
+        password_hash = hashlib.sha256((DEFAULT_TECHNICIAN["password"] + salt).encode()).hexdigest()
+        c.execute(
+            "INSERT INTO users (username, password_hash, salt, role, email, full_name, date_registered) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (DEFAULT_TECHNICIAN["username"], password_hash, salt, "technician", DEFAULT_TECHNICIAN["email"], 
+             DEFAULT_TECHNICIAN["full_name"], datetime.now())
+        )
+    
     conn.commit()
     conn.close()
+    
+    # Check and fix any missing columns
+    check_and_fix_samples_table()
 
 def execute_query(query, params=(), fetchone=False):
     """Execute a SQL query and return results"""
@@ -197,11 +210,47 @@ def save_sample(patient_id, image_path, ai_diagnosis, ai_confidence):
 
 def update_sample_verification(sample_id, doctor_diagnosis, verified, doctor_id):
     """Update a sample with doctor verification"""
-    return execute_query(
-        "UPDATE samples SET doctor_diagnosis = ?, doctor_verified = ?, doctor_id = ? WHERE id = ?",
-        (doctor_diagnosis, 1 if verified else 0, doctor_id, sample_id)
-    )
+    try:
+        # Try the original query with doctor_id
+        result = execute_query(
+            "UPDATE samples SET doctor_diagnosis = ?, doctor_verified = ?, doctor_id = ? WHERE id = ?",
+            (doctor_diagnosis, 1 if verified else 0, doctor_id, sample_id)
+        )
+        return result
+    except sqlite3.Error:
+        # Fallback if doctor_id column doesn't exist
+        result = execute_query(
+            "UPDATE samples SET doctor_diagnosis = ?, doctor_verified = ? WHERE id = ?",
+            (doctor_diagnosis, 1 if verified else 0, sample_id)
+        )
+        return result
 
+def check_and_fix_samples_table():
+    """Check if the samples table has the doctor_id column and add it if missing"""
+    conn = get_connection()
+    if conn is None:
+        return False
+    
+    try:
+        c = conn.cursor()
+        
+        # Check if the column exists
+        c.execute("PRAGMA table_info(samples)")
+        columns = [info[1] for info in c.fetchall()]
+        
+        # If doctor_id column doesn't exist, add it
+        if "doctor_id" not in columns:
+            c.execute("ALTER TABLE samples ADD COLUMN doctor_id INTEGER")
+            conn.commit()
+            st.success("Added missing doctor_id column to samples table")
+        
+        conn.close()
+        return True
+    except sqlite3.Error as e:
+        st.error(f"Database schema check failed: {e}")
+        conn.close()
+        return False
+    
 def create_patient(name, location, latitude, longitude, user_id):
     """Create a new patient record"""
     return execute_query(

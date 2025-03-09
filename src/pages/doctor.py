@@ -92,7 +92,7 @@ def display_doctor_portal():
                             doctor_diagnosis = st.text_input("Enter diagnosis", value=row['ai_diagnosis'], key=f"diag_{row['id']}")
                             
                             # Add common diagnoses as quick select
-                            common_diagnoses = ["Plasmodium falciparum", "Plasmodium vivax", "No parasite detected"]
+                            common_diagnoses = ["Babesia", "Leishmania", "Leukocyte", "Plasmodium", "RBCs", "Toxoplasma", "Trichomonad", "Trypanosome", "No parasite detected"]
                             selected_diagnosis = st.selectbox(
                                 "Or select common diagnosis", 
                                 ["Select..."] + common_diagnoses,

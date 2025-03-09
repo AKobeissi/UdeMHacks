@@ -35,5 +35,12 @@ DEFAULT_DOCTOR = {
     "email": "doctor@parasite.org"
 }
 
+DEFAULT_TECHNICIAN = {
+    "username": "tech1",
+    "password": "tech123",
+    "full_name": "Sam Johnson",
+    "email": "tech@parasite.org"
+}
+
 # Upload directory
 UPLOAD_DIR = "uploads"
