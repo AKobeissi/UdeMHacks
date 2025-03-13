@@ -68,7 +68,7 @@ def generate_insights_with_gemini(prompt):
         
         # Try different ways to get the API key
         # api_key = os.getenv("GEMINI_API_KEY")
-        api_key = "AIzaSyA1ctEo4qW3FCTXGbBRK57-0imsVRoqiBA"
+        api_key = "APIKEY"
         
         # Check if file-based API key exists as fallback
         if not api_key:
